@@ -1,0 +1,10 @@
+[
+  "npm test",
+  "npm run test",
+  "npm run lint",
+  "npm run build",
+  "npx tsc --noEmit",
+  "npx vitest run",
+  "node --version",
+  "npm --version"
+]
