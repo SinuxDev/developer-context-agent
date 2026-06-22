@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: dca-postgres
+    environment:
+      POSTGRES_USER: dca
+      POSTGRES_PASSWORD: dca
+      POSTGRES_DB: developer_context_agent
+    ports:
+      - '5432:5432'
+    volumes:
+      - dca_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dca -d developer_context_agent']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: dca-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - dca_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  dca_postgres_data:
+  dca_redis_data:
