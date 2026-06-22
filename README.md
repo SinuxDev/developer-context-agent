@@ -32,6 +32,19 @@ npm run dev
 
 Server runs at `http://localhost:3100`.
 
+### Groq (recommended for free tier)
+
+1. Get an API key from [console.groq.com](https://console.groq.com)
+2. Add to `.env`:
+
+```env
+GROQ_API_KEY=gsk_your_key_here
+DEFAULT_MODEL=groq:llama-3.3-70b-versatile
+PLANNER_MODEL=groq:llama-3.1-8b-instant
+```
+
+Models use `provider:model` format — also supports `openai:` and `anthropic:` prefixes.
+
 ### Health Check
 
 ```bash
@@ -107,8 +120,11 @@ Unit tests run without Docker. Integration tests require Postgres + Redis.
 | `PORT` | 3100 | HTTP port |
 | `DATABASE_URL` | postgres://dca:dca@localhost:5432/developer_context_agent | Postgres |
 | `REDIS_URL` | redis://localhost:6379 | Redis |
+| `GROQ_API_KEY` | — | Groq API key (recommended for free tier) |
 | `OPENAI_API_KEY` | — | OpenAI API key |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key |
+| `DEFAULT_MODEL` | groq:llama-3.3-70b-versatile | Default model (`provider:model`) |
+| `PLANNER_MODEL` | groq:llama-3.1-8b-instant | Planner model (`provider:model`) |
 | `API_KEY` | — | Optional API auth |
 | `TOKEN_BUDGET_DEFAULT` | 32000 | Default token budget |
 

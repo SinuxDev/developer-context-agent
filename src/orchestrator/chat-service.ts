@@ -75,6 +75,6 @@ export class ChatService {
   ): string {
     const fileList = pkg.files.map((f) => `- ${f.path} (score: ${f.score})`).join('\n');
     const symbolList = pkg.symbols.map((s) => `- ${s.name} in ${s.file}`).join('\n');
-    return `## Context for: ${prompt}\n\n### Repository\n${pkg.repoSummary}\n\n### Relevant Files\n${fileList || 'None found'}\n\n### Symbols\n${symbolList || 'None found'}\n\n*Configure OPENAI_API_KEY or ANTHROPIC_API_KEY for AI-generated explanations.*`;
+    return `## Context for: ${prompt}\n\n### Repository\n${pkg.repoSummary}\n\n### Relevant Files\n${fileList || 'None found'}\n\n### Symbols\n${symbolList || 'None found'}\n\n*Configure GROQ_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY for AI-generated explanations.*`;
   }
 }

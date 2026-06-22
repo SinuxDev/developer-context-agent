@@ -3,18 +3,30 @@ import type { ModelMessage, ModelResponse } from '../core/schemas/index.js';
 import type { CompletionOptions, ModelAdapter } from './local-compressor.js';
 import { countMessagesTokens } from '../context/token-budget.js';
 
-export class OpenAIAdapter implements ModelAdapter {
+export interface OpenAICompatibleOptions {
+  apiKey: string;
+  model: string;
+  providerId?: string;
+  baseURL?: string;
+}
+
+export class OpenAICompatibleAdapter implements ModelAdapter {
   private client: OpenAI;
+  private model: string;
   id: string;
 
-  constructor(apiKey: string, model: string) {
-    this.client = new OpenAI({ apiKey });
-    this.id = `openai:${model}`;
+  constructor(options: OpenAICompatibleOptions) {
+    this.client = new OpenAI({
+      apiKey: options.apiKey,
+      baseURL: options.baseURL,
+    });
+    this.model = options.model;
+    this.id = `${options.providerId ?? 'openai'}:${options.model}`;
   }
 
   async complete(messages: ModelMessage[], options?: CompletionOptions): Promise<ModelResponse> {
     const response = await this.client.chat.completions.create({
-      model: this.id.replace('openai:', ''),
+      model: this.model,
       messages: messages.map((m) => ({
         role: m.role as 'system' | 'user' | 'assistant',
         content: m.content,
@@ -38,5 +50,11 @@ export class OpenAIAdapter implements ModelAdapter {
 
   countTokens(messages: ModelMessage[]): number {
     return countMessagesTokens(messages);
+  }
+}
+
+export class OpenAIAdapter extends OpenAICompatibleAdapter {
+  constructor(apiKey: string, model: string) {
+    super({ apiKey, model, providerId: 'openai' });
   }
 }
