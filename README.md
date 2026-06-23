@@ -118,7 +118,7 @@ Unit tests run without Docker. Integration tests require Postgres + Redis.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3100 | HTTP port |
-| `DATABASE_URL` | postgres://dca:dca@localhost:5432/developer_context_agent | Postgres |
+| `DATABASE_URL` | postgres://dca:dca@localhost:5433/developer_context_agent | Postgres |
 | `REDIS_URL` | redis://localhost:6379 | Redis |
 | `GROQ_API_KEY` | — | Groq API key (recommended for free tier) |
 | `OPENAI_API_KEY` | — | OpenAI API key |

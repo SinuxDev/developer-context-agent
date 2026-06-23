@@ -13,7 +13,7 @@ const fixturePath = path.resolve(
 describe('tools', () => {
   const config = loadConfig({
     ...process.env,
-    DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://dca:dca@localhost:5432/developer_context_agent',
+    DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://dca:dca@localhost:5433/developer_context_agent',
     REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
   });
 
