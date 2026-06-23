@@ -37,4 +37,23 @@ describe('ModelRouter', () => {
     expect(router.getAdapter('default').id).toBe('groq:llama-3.3-70b-versatile');
     expect(router.getAdapter('planner').id).toBe('groq:llama-3.1-8b-instant');
   });
+
+  it('falls back to Groq when only groq key is set but model ref is openai', () => {
+    const router = new ModelRouter({
+      port: 3100,
+      databaseUrl: 'postgres://localhost/db',
+      redisUrl: 'redis://localhost',
+      groqApiKey: 'test-key',
+      defaultModel: 'openai:gpt-4o-mini',
+      plannerModel: 'openai:gpt-4o',
+      allowedRepoRoots: [],
+      tokenBudgetDefault: 32000,
+      logLevel: 'info',
+      nodeEnv: 'test',
+    });
+
+    expect(router.hasRemoteModel()).toBe(true);
+    expect(router.getAdapter('default').id).toBe('groq:llama-3.3-70b-versatile');
+    expect(router.getAdapter('planner').id).toBe('groq:llama-3.1-8b-instant');
+  });
 });

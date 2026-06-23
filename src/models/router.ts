@@ -8,7 +8,7 @@ import { parseProviderModel } from './provider-model.js';
 
 export type ModelRole = 'planner' | 'executor' | 'reviewer' | 'compressor' | 'default';
 
-function createAdapter(
+export function createAdapter(
   config: AppConfig,
   modelRef: string,
 ): ModelAdapter | null {
@@ -27,14 +27,46 @@ function createAdapter(
   return null;
 }
 
+function resolveAdapter(
+  config: AppConfig,
+  modelRef: string,
+  role: 'planner' | 'default' = 'default',
+): ModelAdapter | null {
+  const direct = createAdapter(config, modelRef);
+  if (direct) return direct;
+
+  const { provider, model } = parseProviderModel(modelRef);
+
+  if (config.groqApiKey) {
+    const groqModel =
+      provider === 'groq'
+        ? model
+        : role === 'planner'
+          ? 'llama-3.1-8b-instant'
+          : 'llama-3.3-70b-versatile';
+    return new GroqAdapter(config.groqApiKey, groqModel);
+  }
+  if (config.openaiApiKey) {
+    const openaiModel = provider === 'openai' ? model : 'gpt-4o-mini';
+    return new OpenAIAdapter(config.openaiApiKey, openaiModel);
+  }
+  if (config.anthropicApiKey) {
+    const anthropicModel =
+      provider === 'anthropic' ? model : 'claude-3-5-sonnet-20241022';
+    return new AnthropicAdapter(config.anthropicApiKey, anthropicModel);
+  }
+
+  return null;
+}
+
 export class ModelRouter {
   private adapters = new Map<string, ModelAdapter>();
   private compressor: ModelAdapter;
 
   constructor(config: AppConfig) {
-    const defaultAdapter = createAdapter(config, config.defaultModel);
+    const defaultAdapter = resolveAdapter(config, config.defaultModel, 'default');
     const plannerAdapter =
-      createAdapter(config, config.plannerModel) ?? defaultAdapter;
+      resolveAdapter(config, config.plannerModel, 'planner') ?? defaultAdapter;
 
     if (defaultAdapter) {
       this.adapters.set('default', defaultAdapter);
