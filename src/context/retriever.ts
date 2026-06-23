@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { runRipgrep } from '../tools/ripgrep.js';
 import type { RedisClient } from '../db/redis.js';
 import type { RepoMap } from './repo-map.js';
 import type { SymbolIndex, SymbolEntry } from './symbol-index.js';
@@ -148,22 +149,14 @@ export class HybridRetriever {
     }
 
     try {
-      const { execFile } = await import('node:child_process');
-      const { promisify } = await import('node:util');
-      const execFileAsync = promisify(execFile);
       const pattern = terms.join('|');
       if (!pattern) return scores;
 
-      const { stdout } = await execFileAsync(
-        'rg',
+      const { stdout } = await runRipgrep(
         ['--json', '-i', pattern, repoPath, '-g', '!node_modules'],
-        { maxBuffer: 5 * 1024 * 1024 },
-      ).catch((err: { code?: number; stdout?: string }) => {
-        if (err.code === 1) return { stdout: '' };
-        throw err;
-      });
+      );
 
-      for (const line of (stdout ?? '').split('\n').filter(Boolean)) {
+      for (const line of stdout.split('\n').filter(Boolean)) {
         try {
           const parsed = JSON.parse(line) as {
             type: string;

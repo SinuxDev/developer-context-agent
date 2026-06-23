@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { ToolRegistry } from './registry.js';
+import { runRipgrep } from './ripgrep.js';
 import { createSandbox } from './sandbox.js';
 import type { AppConfig } from '../core/config.js';
 
@@ -217,9 +218,6 @@ export async function createDefaultToolRegistry(
     inputSchema: grepInput,
     outputSchema: grepOutput,
     execute: async (input, ctx) => {
-      const { execFile } = await import('node:child_process');
-      const { promisify } = await import('node:util');
-      const execFileAsync = promisify(execFile);
       const sandbox = createSandbox(ctx.repoPath, config);
       const searchPath = sandbox.resolve(input.path ?? '.');
       const maxMatches = input.maxMatches ?? 50;
@@ -234,27 +232,19 @@ export async function createDefaultToolRegistry(
         args.unshift('--glob', input.fileGlob);
       }
 
-      try {
-        const { stdout } = await execFileAsync('rg', args, { cwd: sandbox.root });
-        const matches: Array<{ file: string; line: number; content: string }> = [];
-        for (const line of stdout.split('\n').filter(Boolean)) {
-          const parsed = JSON.parse(line) as { type: string; data: { path: { text: string }; line_number: number; lines: { text: string } } };
-          if (parsed.type === 'match') {
-            matches.push({
-              file: sandbox.toRelative(parsed.data.path.text),
-              line: parsed.data.line_number,
-              content: parsed.data.lines.text.trim(),
-            });
-          }
+      const { stdout } = await runRipgrep(args, { cwd: sandbox.root });
+      const matches: Array<{ file: string; line: number; content: string }> = [];
+      for (const line of stdout.split('\n').filter(Boolean)) {
+        const parsed = JSON.parse(line) as { type: string; data: { path: { text: string }; line_number: number; lines: { text: string } } };
+        if (parsed.type === 'match') {
+          matches.push({
+            file: sandbox.toRelative(parsed.data.path.text),
+            line: parsed.data.line_number,
+            content: parsed.data.lines.text.trim(),
+          });
         }
-        return { matches, truncated: matches.length >= maxMatches };
-      } catch (err: unknown) {
-        const execErr = err as { code?: number; stdout?: string };
-        if (execErr.code === 1) {
-          return { matches: [], truncated: false };
-        }
-        throw err;
       }
+      return { matches, truncated: matches.length >= maxMatches };
     },
   });
 
