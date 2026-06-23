@@ -9,6 +9,7 @@ import type { AppConfig } from '../core/config.js';
 import type { Database } from '../db/client.js';
 import type { RedisClient } from '../db/redis.js';
 import type { Logger } from '../observability/logger.js';
+import { getPinoConfig } from '../observability/logger.js';
 import type { MetricsRegistry } from '../observability/metrics.js';
 import { registerRoutes, type AppDependencies } from './plugins/index.js';
 
@@ -22,7 +23,7 @@ export interface CreateServerOptions {
 
 export async function createServer(options: CreateServerOptions) {
   const app = Fastify({
-    logger: options.logger,
+    logger: getPinoConfig(options.config),
     requestIdHeader: 'x-request-id',
     genReqId: () => crypto.randomUUID(),
   }).withTypeProvider<ZodTypeProvider>();
