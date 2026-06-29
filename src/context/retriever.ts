@@ -20,6 +20,8 @@ export interface RetrievalResult {
 export interface HybridRetrieverOptions {
   redis?: RedisClient;
   cacheTtlSeconds?: number;
+  getCache?: (key: string) => string | null | Promise<string | null>;
+  setCache?: (key: string, value: string, ttlSeconds?: number) => void | Promise<void>;
 }
 
 export class HybridRetriever {
@@ -35,14 +37,12 @@ export class HybridRetriever {
   ): Promise<RetrievalResult> {
     const cacheKey = this.buildCacheKey(repoPath, query, topK);
 
-    if (this.options.redis) {
-      const cached = await this.options.redis.get(cacheKey);
-      if (cached) {
-        metrics.recordCacheHit('retrieval');
-        return { ...JSON.parse(cached) as Omit<RetrievalResult, 'fromCache'>, fromCache: true };
-      }
-      metrics.recordCacheMiss('retrieval');
+    const cached = await this.readCache(cacheKey);
+    if (cached) {
+      metrics.recordCacheHit('retrieval');
+      return { ...JSON.parse(cached) as Omit<RetrievalResult, 'fromCache'>, fromCache: true };
     }
+    metrics.recordCacheMiss('retrieval');
 
     const repoMap = await this.getRepoMap(repoPath);
     const symbolIndex = await this.getSymbolIndex(repoPath, repoMap.files.map((f) => f.path));
@@ -99,15 +99,33 @@ export class HybridRetriever {
       fromCache: false,
     };
 
-    if (this.options.redis) {
-      const ttl = this.options.cacheTtlSeconds ?? 3600;
-      await this.options.redis.setex(cacheKey, ttl, JSON.stringify({
-        files: result.files,
-        symbols: result.symbols,
-      }));
-    }
+    await this.writeCache(cacheKey, JSON.stringify({
+      files: result.files,
+      symbols: result.symbols,
+    }));
 
     return result;
+  }
+
+  private async readCache(key: string): Promise<string | null> {
+    if (this.options.getCache) {
+      return (await this.options.getCache(key)) ?? null;
+    }
+    if (this.options.redis) {
+      return (await this.options.redis.get(key)) ?? null;
+    }
+    return null;
+  }
+
+  private async writeCache(key: string, value: string): Promise<void> {
+    const ttl = this.options.cacheTtlSeconds ?? 3600;
+    if (this.options.setCache) {
+      await this.options.setCache(key, value, ttl);
+      return;
+    }
+    if (this.options.redis) {
+      await this.options.redis.setex(key, ttl, value);
+    }
   }
 
   private buildCacheKey(repoPath: string, query: string, topK: number): string {

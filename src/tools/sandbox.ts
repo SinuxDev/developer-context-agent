@@ -1,6 +1,8 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import type { AppConfig } from '../core/config.js';
+export interface RepoAccessConfig {
+  allowedRepoRoots: string[];
+}
 
 export class RepoSandbox {
   constructor(
@@ -43,7 +45,7 @@ export class RepoSandbox {
   }
 }
 
-export function createSandbox(repoPath: string, config: AppConfig): RepoSandbox {
+export function createSandbox(repoPath: string, config: RepoAccessConfig): RepoSandbox {
   const sandbox = new RepoSandbox(repoPath, config.allowedRepoRoots);
   sandbox.validateRepoAccess();
   return sandbox;
