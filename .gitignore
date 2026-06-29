@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 *.log
+*.tgz
 .DS_Store
 coverage/
 .context-agent/

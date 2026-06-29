@@ -1,34 +1,41 @@
-# Developer Context Agent
+# developer-context-agent
 
-Local **context agent** for AI coding assistants (Cursor, Claude Desktop, Windsurf, and any MCP client). It indexes your repo locally, finds relevant files with hybrid retrieval, and returns **token-budgeted context packs** — without calling an LLM itself.
+[![npm version](https://img.shields.io/npm/v/developer-context-agent.svg)](https://www.npmjs.com/package/developer-context-agent)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/SinuxDev/developer-context-agent/blob/master/LICENSE)
 
-## What it does
+**Token-efficient codebase context for AI assistants.**  
+Indexes your repo locally, ranks relevant files with hybrid retrieval, and returns **token-budgeted context packs** via MCP — no LLM required in this package.
 
-- **Indexes** your codebase locally (`.context-agent/` in the project)
-- **Retrieves** via grep + TypeScript symbols + import graph + optional Ollama embeddings
-- **Compresses** results into a context pack within a token budget
-- **Exposes MCP tools** so Cursor (or any MCP host) can call your agent during chat
+Works with **Cursor**, **Claude Desktop**, **Windsurf**, and any [Model Context Protocol](https://modelcontextprotocol.io) client.
 
-The host LLM (Cursor, Claude, etc.) does the reasoning. This agent supplies efficient context.
+> The host LLM (Cursor, Claude, etc.) does the reasoning.  
+> This agent finds, ranks, and compresses codebase context.
+
+## Install
+
+```bash
+npm install -g developer-context-agent
+```
+
+Or use without installing:
+
+```bash
+npx developer-context-agent --help
+```
+
+**Requirements:** Node.js 20+
 
 ## Quick start
 
 ```bash
-npm install
-npm run context-agent -- index --repo .
-npm run mcp
+cd your-project
+context-agent index
+context-agent pack --task "how does auth work"
 ```
 
-Or after build/publish:
+### Use with Cursor
 
-```bash
-npx developer-context-agent index
-npx developer-context-agent mcp
-```
-
-## Cursor setup
-
-Add to `.cursor/mcp.json` in your project:
+Add `.cursor/mcp.json` in your project:
 
 ```json
 {
@@ -44,22 +51,17 @@ Add to `.cursor/mcp.json` in your project:
 }
 ```
 
-Restart Cursor. In chat, the model can call `get_context_pack`, `find_files`, `search_symbols`, etc.
+Restart Cursor, enable the MCP server in **Settings → MCP**, then chat as usual. The model can call `get_context_pack` before reading files.
 
-### Cursor rule (recommended)
-
-Create `.cursor/rules/context-agent.mdc`:
+**Recommended Cursor rule** (`.cursor/rules/context-agent.mdc`):
 
 ```markdown
-Before reading large files or searching the codebase manually,
-use the context-agent MCP tools:
+Before reading large files or searching the codebase manually, use context-agent MCP tools:
 1. get_context_pack for the user's question
 2. find_files / search_symbols only if more detail is needed
 ```
 
-## Claude Desktop / other MCP clients
-
-Use the same stdio command in your MCP config:
+### Use with Claude Desktop / other MCP clients
 
 ```json
 {
@@ -75,66 +77,104 @@ Use the same stdio command in your MCP config:
 }
 ```
 
-## CLI commands
+## How it works
+
+```
+You ask in Cursor chat
+       ↓
+Host LLM calls get_context_pack("auth middleware")
+       ↓
+Agent: grep + symbols + import graph (+ optional vectors)
+       ↓
+Returns small markdown context pack (token-budgeted)
+       ↓
+Host LLM answers using that context
+```
+
+Local index is stored in `.context-agent/` inside your project (SQLite). Nothing is sent to a cloud service by this package.
+
+## CLI
 
 | Command | Description |
 |---------|-------------|
 | `context-agent mcp` | Start MCP server (stdio) |
-| `context-agent index [--repo path]` | Build local index |
-| `context-agent status [--repo path]` | Index metadata |
-| `context-agent pack --task "…"` | Print context pack to stdout |
+| `context-agent index [--repo path]` | Build or refresh local index |
+| `context-agent status [--repo path]` | Show index metadata |
+| `context-agent pack --task "…" [--repo path]` | Print context pack to stdout |
+
+Examples:
+
+```bash
+context-agent index --repo .
+context-agent status --repo .
+context-agent pack --task "explain hybrid retrieval" --max-tokens 6000
+```
 
 ## MCP tools
 
 | Tool | Description |
 |------|-------------|
-| `get_context_pack` | Token-budgeted context for a task (primary tool) |
-| `find_files` | Rank files by relevance |
+| `get_context_pack` | **Primary tool** — token-budgeted context for a task |
+| `find_files` | Rank files by relevance (grep + symbols + vectors) |
 | `search_symbols` | TypeScript/JavaScript symbol search |
 | `grep` | Sandboxed ripgrep |
-| `read_file` | Sandboxed file read |
-| `index_repo` | Build/refresh local index |
-| `index_status` | Index health |
-
-## Optional: Ollama embeddings
-
-Hybrid retrieval works without Ollama. For semantic vector search:
-
-1. Install [Ollama](https://ollama.com)
-2. `ollama pull nomic-embed-text`
-3. Run `context-agent index`
-
-```env
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_EMBED_MODEL=nomic-embed-text
-```
+| `read_file` | Sandboxed file read (optional line range) |
+| `index_repo` | Build or refresh local index |
+| `index_status` | Index health and chunk count |
 
 ## Configuration
+
+Environment variables (optional):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `REPO_PATH` | `cwd` | Default repository path |
-| `TOKEN_BUDGET_DEFAULT` | `8000` | Default context pack budget |
+| `TOKEN_BUDGET_DEFAULT` | `8000` | Default context pack token budget |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API for embeddings |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding model |
-| `ALLOWED_REPO_ROOTS` | — | Comma-separated path allowlist |
+| `ALLOWED_REPO_ROOTS` | — | Comma-separated repo path allowlist |
 
-## Legacy HTTP server
+## Optional: semantic search with Ollama
 
-The optional Fastify server (`npm run dev`) with Postgres/Redis is still available for supervised runs. The **recommended path** is the local MCP agent — no Docker required.
+Hybrid retrieval works **without** Ollama (grep + symbols + import graph).  
+For vector similarity search:
 
 ```bash
-npm run docker:up   # only for HTTP /runs API
+ollama pull nomic-embed-text
+context-agent index
+```
+
+## Development
+
+Clone and work on the source repo:
+
+```bash
+git clone https://github.com/SinuxDev/developer-context-agent.git
+cd developer-context-agent
+npm install
+npm test
+npm run context-agent -- index --repo .
+npm run mcp
+```
+
+### Legacy HTTP server
+
+An optional Fastify API (`POST /chat`, `POST /runs`) with Postgres/Redis is still in the codebase for supervised runs. It is **not** required for the MCP agent.
+
+```bash
+npm run docker:up
 npm run db:migrate
 npm run dev
 ```
 
-## Testing
+See [docs/IDE_BRIDGE.md](docs/IDE_BRIDGE.md) for HTTP API details.
 
-```bash
-npm test
-```
+## Links
+
+- **npm:** https://www.npmjs.com/package/developer-context-agent
+- **Repository:** https://github.com/SinuxDev/developer-context-agent
+- **Issues:** https://github.com/SinuxDev/developer-context-agent/issues
 
 ## License
 
-MIT
+[MIT](LICENSE)
