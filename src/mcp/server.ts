@@ -2,94 +2,129 @@ import '../core/load-env.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { loadConfig } from '../core/config.js';
-import { createDb } from '../db/client.js';
-import { createRedis } from '../db/redis.js';
-import { createLogger } from '../observability/logger.js';
-import { RunStore } from '../orchestrator/run-store.js';
-import { Orchestrator } from '../orchestrator/orchestrator.js';
-import { ChatService } from '../orchestrator/chat-service.js';
-import { HybridRetriever } from '../context/retriever.js';
+import { ContextAgentService } from '../agent/context-service.js';
+import { loadLocalConfig } from '../local/config.js';
+
+function mcpText(data: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }],
+  };
+}
 
 export async function startMcpServer(): Promise<void> {
-  const config = loadConfig();
-  const logger = createLogger(config);
-  const db = createDb(config.databaseUrl);
-  const redis = createRedis(config.redisUrl);
-  await redis.connect();
-
-  const runStore = new RunStore(db, redis);
-  const orchestrator = new Orchestrator(config, runStore, logger, redis);
-  const chatService = new ChatService(config, logger);
-  const retriever = new HybridRetriever({ redis });
+  const localConfig = loadLocalConfig();
+  const service = new ContextAgentService(localConfig);
 
   const server = new McpServer({
-    name: 'developer-context-agent',
-    version: '0.1.0',
+    name: 'context-agent',
+    version: '0.2.0',
+  });
+
+  const repoPathSchema = z.object({
+    repoPath: z.string().optional().describe('Absolute path to repository (defaults to REPO_PATH env or cwd)'),
   });
 
   server.tool(
-    'start_run',
-    'Start a new agent run for a coding task',
+    'get_context_pack',
+    'Build a token-budgeted context pack for a coding task. Use this before answering codebase questions.',
     {
-      mode: z.enum(['explain', 'find', 'plan', 'context-pack', 'patch', 'validate']),
-      prompt: z.string(),
-      repoPath: z.string(),
+      task: z.string().describe('What the user is trying to understand or accomplish'),
+      repoPath: z.string().optional(),
+      maxTokens: z.number().int().positive().optional().describe('Token budget for the context pack'),
+      topKFiles: z.number().int().positive().optional().describe('Maximum number of files to include'),
     },
-    async ({ mode, prompt, repoPath }) => {
-      const state = await orchestrator.startRun({ mode, prompt, repoPath });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(state, null, 2) }],
-      };
-    },
-  );
-
-  server.tool(
-    'get_run',
-    'Get the current state of a run',
-    { runId: z.string().uuid() },
-    async ({ runId }) => {
-      const state = await runStore.getRun(runId);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(state, null, 2) }],
-      };
-    },
-  );
-
-  server.tool(
-    'explain',
-    'Lightweight explain mode for a codebase question',
-    {
-      prompt: z.string(),
-      repoPath: z.string(),
-    },
-    async ({ prompt, repoPath }) => {
-      const response = await chatService.chat({ prompt, repoPath });
-      return {
-        content: [{ type: 'text' as const, text: response.answer }],
-      };
+    async ({ task, repoPath, maxTokens, topKFiles }) => {
+      const pack = await service.getContextPack({ task, repoPath, maxTokens, topKFiles });
+      return mcpText({
+        markdown: pack.markdown,
+        files: pack.files,
+        tokenCount: pack.tokenCount,
+        repoPath: pack.repoPath,
+      });
     },
   );
 
   server.tool(
     'find_files',
-    'Find files related to a query in the repository',
+    'Find repository files ranked by relevance to a query (grep + symbols + optional vectors)',
     {
       query: z.string(),
-      repoPath: z.string(),
-      topK: z.number().optional(),
+      repoPath: z.string().optional(),
+      topK: z.number().int().positive().optional(),
     },
     async ({ query, repoPath, topK }) => {
-      const result = await retriever.retrieve(repoPath, query, topK ?? 10);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-      };
+      const result = await service.findFiles({ query, repoPath, topK });
+      return mcpText(result);
+    },
+  );
+
+  server.tool(
+    'search_symbols',
+    'Search TypeScript/JavaScript symbols (classes, functions, exports)',
+    {
+      query: z.string(),
+      repoPath: z.string().optional(),
+      maxResults: z.number().int().positive().optional(),
+    },
+    async ({ query, repoPath, maxResults }) => {
+      const symbols = await service.searchSymbols(query, repoPath, maxResults ?? 20);
+      return mcpText({ symbols });
+    },
+  );
+
+  server.tool(
+    'grep',
+    'Search file contents with ripgrep inside the repository sandbox',
+    {
+      pattern: z.string(),
+      repoPath: z.string().optional(),
+      path: z.string().optional().describe('Relative path within repo'),
+      maxMatches: z.number().int().positive().optional(),
+    },
+    async ({ pattern, repoPath, path: searchPath, maxMatches }) => {
+      const result = await service.grep({ pattern, repoPath, path: searchPath, maxMatches });
+      return mcpText(result);
+    },
+  );
+
+  server.tool(
+    'read_file',
+    'Read a file from the repository (optionally a line range)',
+    {
+      path: z.string(),
+      repoPath: z.string().optional(),
+      startLine: z.number().int().positive().optional(),
+      endLine: z.number().int().positive().optional(),
+    },
+    async ({ path: filePath, repoPath, startLine, endLine }) => {
+      const result = await service.readFile({ path: filePath, repoPath, startLine, endLine });
+      return mcpText(result);
+    },
+  );
+
+  server.tool(
+    'index_repo',
+    'Index the repository for hybrid retrieval (optional Ollama embeddings when available)',
+    repoPathSchema.shape,
+    async ({ repoPath }) => {
+      const result = await service.indexRepo(repoPath);
+      return mcpText(result);
+    },
+  );
+
+  server.tool(
+    'index_status',
+    'Check local index status for a repository',
+    repoPathSchema.shape,
+    async ({ repoPath }) => {
+      const status = service.indexStatus(repoPath);
+      return mcpText(status);
     },
   );
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  logger.info('MCP server started on stdio');
+  console.error('Context Agent MCP server started (stdio)');
 }
 
 if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}`) {
