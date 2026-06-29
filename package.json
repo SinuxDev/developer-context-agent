@@ -2,6 +2,12 @@
   "name": "developer-context-agent",
   "version": "0.2.0",
   "description": "Local context agent for AI assistants — hybrid retrieval, token-budgeted context packs, MCP server",
+  "license": "MIT",
+  "keywords": ["mcp", "context-engineering", "cursor", "ai-agent", "codebase"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SinuxDev/developer-context-agent.git"
+  },
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -25,7 +31,8 @@
     "lint": "eslint src tests",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "mcp": "tsx src/cli/main.ts mcp",
-    "context-agent": "tsx src/cli/main.ts"
+    "context-agent": "tsx src/cli/main.ts",
+    "prepublishOnly": "npm run build && npm test"
   },
   "engines": {
     "node": ">=20"
