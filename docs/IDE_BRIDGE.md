@@ -1,87 +1,35 @@
-# IDE Bridge Contract
+# Context Agent MCP Bridge
 
-This document describes how IDE extensions (VS Code, Cursor, etc.) integrate with the Developer Context Agent HTTP API.
+Connect any MCP-compatible AI client to the local context agent.
 
-## Base URL
+## Supported clients
 
-Default: `http://localhost:3100`
+- **Cursor** — `.cursor/mcp.json`
+- **Claude Desktop** — `claude_desktop_config.json`
+- **Windsurf**, **Zed**, and other MCP hosts — same stdio config
 
-## Authentication
-
-Optional API key via header:
-
-```
-X-API-Key: <your-api-key>
-```
-
-## Endpoints
-
-### POST /runs
-
-Start a supervised agent run.
-
-```json
-{
-  "mode": "explain|find|plan|context-pack|patch|validate",
-  "prompt": "Explain the auth middleware",
-  "repoPath": "/absolute/path/to/repo",
-  "budget": { "maxTokens": 32000, "maxSteps": 10, "topKFiles": 10 },
-  "constraints": { "requireApproval": true, "sessionId": "optional-session-id" }
-}
-```
-
-Response: `RunState` object with `id`, `status`, `plan`, `steps`, `artifacts`.
-
-### GET /runs/:id
-
-Poll run status. Returns full `RunState`.
-
-### POST /runs/:id/approve
-
-Approve or reject a gated action (patch, shell command).
-
-```json
-{
-  "approvalId": "uuid",
-  "approved": true,
-  "comment": "optional"
-}
-```
-
-### POST /chat
-
-Lightweight explain mode without full run lifecycle.
-
-```json
-{
-  "prompt": "What does src/auth.ts do?",
-  "repoPath": "/absolute/path/to/repo",
-  "sessionId": "optional"
-}
-```
-
-### GET /metrics
-
-Token usage, cache hit rates, latency, and cost estimates.
-
-### GET /health
-
-Liveness check for database and Redis.
-
-## Integration Pattern
-
-1. Extension detects workspace root as `repoPath`.
-2. For quick questions, call `POST /chat`.
-3. For multi-step tasks (plan, patch, validate), call `POST /runs` and poll `GET /runs/:id`.
-4. When `status` is `awaiting_approval`, show UI and call `POST /runs/:id/approve`.
-5. Display artifacts (`plan`, `patch`, `context-package`) from run state.
-
-## MCP Alternative
-
-Extensions can also connect via MCP stdio transport:
+## MCP server command
 
 ```bash
-npx tsx src/mcp/server.ts
+npx developer-context-agent mcp
 ```
 
-Tools: `start_run`, `get_run`, `explain`, `find_files`.
+## Environment
+
+| Variable | Description |
+|----------|-------------|
+| `REPO_PATH` | Workspace root (use `${workspaceFolder}` in Cursor) |
+| `TOKEN_BUDGET_DEFAULT` | Default max tokens for `get_context_pack` |
+| `OLLAMA_BASE_URL` | Optional embeddings via Ollama |
+
+## Primary tool
+
+Call **`get_context_pack`** before answering codebase questions. It returns markdown + file list within a token budget.
+
+## Other tools
+
+`find_files`, `search_symbols`, `grep`, `read_file`, `index_repo`, `index_status`
+
+## HTTP API (optional legacy)
+
+The Fastify server on port 3100 (`POST /chat`, `POST /runs`) remains available for custom integrations. MCP is the recommended integration path.
